@@ -2,7 +2,7 @@
 import pygame
 import os
 import json
-from ..components import info, player
+from ..components import info, player, stuff
 from .. import tools, setup
 from .. import constants as C
 
@@ -10,12 +10,13 @@ from .. import constants as C
 class Level:
     def __init__(self):
         self.finished = False
-        self.next = None
+        self.next = 'game_over'
         self.info = info.Info('level')
         self.load_map_data()
         self.setup_background()
         self.setup_start_position()
         self.setup_player()
+        self.setup_ground_items()
 
     def load_map_data(self):
         file_name = 'level_1.json'
@@ -45,24 +46,91 @@ class Level:
         self.player.rect.x = self.start_x + self.player_x
         self.player.rect.bottom = self.player_y
 
+    def setup_ground_items(self):
+        self.ground_items_group = pygame.sprite.Group()
+        for name in ['ground', 'pipe', 'step']:
+            for item in self.map_data[name]:
+                self.ground_items_group.add(stuff.Item(item['x'], item['y'], item['width'], item['height'], name))
+
+
     def update(self, surface, keys):
+
+        self.current_time = pygame.time.get_ticks()
         self.player.update(keys)
-        self.update_player_position()
-        self.update_game_window()
+
+        if self.player.dead:
+            if self.current_time - self.player.death_timer > 3000:
+                self.finished = True
+        else:
+            self.update_player_position()
+            self.check_if_go_die()
+            self.update_game_window()
+            self.info.update()
         self.draw(surface)
 
 
     def update_player_position(self):
+        # x坐标碰撞检测
         self.player.rect.x += self.player.x_vel
         if self.player.rect.x < self.game_window.x:
             self.player.rect.x = self.game_window.x
         elif self.player.rect.right > self.end_x:
             self.player.rect.right = self.end_x
+        self.check_x_collision()
+
+        # y坐标碰撞检测
         self.player.rect.y += self.player.y_vel
+        self.check_y_collision()
+
+    # x坐标碰撞检测
+    def check_x_collision(self):
+        ground_item = pygame.sprite.spritecollideany(self.player, self.ground_items_group)
+        if ground_item:
+            self.adjust_player_x(ground_item)
+
+    # x坐标位置调整
+    def adjust_player_x(self, item):
+        if self.player.rect.x < item.rect.x:
+            self.player.rect.right = item.rect.left
+        else:
+            self.player.rect.left = item.rect.right
+        self.player.x_vel = 0
+
+    # y坐标碰撞检测
+    def check_y_collision(self):
+        ground_item = pygame.sprite.spritecollideany(self.player, self.ground_items_group)
+        if ground_item:
+            self.adjust_player_y(ground_item)
+        self.check_fall(self.player)
+
+    def adjust_player_y(self, item):
+
+        if self.player.rect.bottom < item.rect.bottom:
+            self.player.rect.bottom = item.rect.top
+            self.player.y_vel = 0
+            self.player.states = 'fall'
+            self.player.states = 'walk'
+        else:
+            self.player.y_vel = 8
+            self.player.rect.top = item.rect.bottom
+            self.player.states = 'fall'
+
+    def check_fall(self, item):
+        item.rect.y += 1
+        collided = pygame.sprite.spritecollideany(item, self.ground_items_group)
+        if not collided and item.states != 'jump':
+            item.states = 'fall'
+
+        item.rect.y -=1
+
+
+    def check_if_go_die(self):
+        if self.player.rect.y > C.SCREEN_H:
+            self.player.go_die()
 
     def update_game_window(self):
         third = self.game_window.x + self.game_window.width / 3
-        if self.player.x_vel > 0 and self.player.rect.centerx > third and self.game_window.right < self.end_x:
+        if self.player.x_vel > 0 and self.player.rect.centerx > third and self.game_window.right < self.end_x :
             self.game_window.x += self.player.x_vel
 
 
