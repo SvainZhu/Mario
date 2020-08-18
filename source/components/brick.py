@@ -5,7 +5,7 @@ from .. import constants as C
 
 
 class Brick(pygame.sprite.Sprite):
-    def __init__(self, x, y, brick_type, color=None):
+    def __init__(self, x, y, brick_type, color=None, name='brick'):
         pygame.sprite.Sprite.__init__(self)
         self.x = x
         self.y = y
@@ -27,3 +27,40 @@ class Brick(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = self.x
         self.rect.y = self.y
+        self.name = name
+        self.state = 'normal'
+        self.gravity = C.GRAVITY
+
+    def update(self):
+        self.current_time = pygame.time.get_ticks()
+        self.handle_states()
+
+    def handle_states(self):
+        if self.state == 'normal':
+            self.normal()
+        elif self.state == 'bumped':
+            self.bumped()
+        elif self.state == 'opened':
+            self.opened()
+
+    def normal(self):
+        pass
+
+
+    def go_bumped(self):
+        self.y_vel = -7
+        self.state = 'bumped'
+
+
+    def bumped(self):
+        self.rect.y += self.y_vel
+        self.y_vel += self.gravity
+        if self.rect.y > self.y:
+            self.rect.y = self.y
+            self.y_vel = 0
+            self.state = 'normal'
+
+    def opened(self):
+        pass
+
+

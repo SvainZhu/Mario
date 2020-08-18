@@ -81,7 +81,9 @@ class Level:
                 self.brick_group.add(box.Box(x, y, box_type))
 
     def setup_enemies(self):
+        self.die_group = pygame.sprite.Group()
         self.enemy_group = pygame.sprite.Group()
+        self.shell_group = pygame.sprite.Group()
         self.enemy_group_dict = {}
         for enemy_group_data in self.map_data['enemy']:
             group = pygame.sprite.Group()
@@ -123,6 +125,8 @@ class Level:
             self.brick_group.update()
             self.box_group.update()
             self.enemy_group.update(self)
+            self.die_group.update(self)
+            self.shell_group.update(self)
 
         self.draw(surface)
 
@@ -137,8 +141,9 @@ class Level:
         self.check_x_collision()
 
         # y坐标碰撞检测
-        self.player.rect.y += self.player.y_vel
-        self.check_y_collision()
+        if not self.player.dead:
+            self.player.rect.y += self.player.y_vel
+            self.check_y_collision()
 
 
     # x坐标碰撞检测
@@ -147,6 +152,27 @@ class Level:
         ground_item = pygame.sprite.spritecollideany(self.player, items)
         if ground_item:
             self.adjust_player_x(ground_item)
+
+        enemy = pygame.sprite.spritecollideany(self.player, self.enemy_group)
+        if enemy:
+            self.player.go_die()
+
+        shell = pygame.sprite.spritecollideany(self.player, self.shell_group)
+        if shell:
+            if shell.state == 'slide':
+                self.player.go_die()
+            if self.player.rect.x < shell.rect.x:
+                shell.x_vel = 10
+                shell.rect.x += 40
+                shell.direction = 1
+            else:
+                shell.x_vel = -10
+                shell.rect.x -= 40
+                shell.direction = 0
+            shell.state = 'slide'
+
+
+
 
     # x坐标位置调整
     def adjust_player_x(self, item):
@@ -158,11 +184,42 @@ class Level:
 
     # y坐标碰撞检测
     def check_y_collision(self):
-        items = pygame.sprite.Group(self.brick_group, self.ground_items_group, self.box_group)
-        ground_item = pygame.sprite.spritecollideany(self.player, items)
+        ground_item = pygame.sprite.spritecollideany(self.player, self.ground_items_group)
+        brick = pygame.sprite.spritecollideany(self.player, self.brick_group)
+        box = pygame.sprite.spritecollideany(self.player, self.box_group)
+        enemy = pygame.sprite.spritecollideany(self.player, self.enemy_group)
+        # 当砖块和宝箱同时被顶起时检测那个离马里奥更近并无视另一个
+        if brick and box:
+            to_brick = abs(self.player.rect.centerx - brick.rect.centerx)
+            to_box = abs(self.player.rect.centerx - box.rect.centerx)
+            if to_brick > to_box:
+                brick = None
+            else:
+                box = None
         if ground_item:
             self.adjust_player_y(ground_item)
+        elif brick:
+            self.adjust_player_y(brick)
+        elif box:
+            self.adjust_player_y(box)
+        elif enemy:
+            self.enemy_group.remove(enemy)
+            if enemy.name == 'koopa':
+                self.shell_group.add(enemy)
+            else:
+                self.die_group.add(enemy)
+
+            if self.player.y_vel < 0:
+                die = 'bumped'
+            else:
+                die = 'trampled'
+                self.player.state = 'jump'
+                self.player.rect.bottom = enemy.rect.top
+                self.player.y_vel = self.player.jump_vel * 0.8
+            enemy.go_die(die)
+
         self.check_fall(self.player)
+
 
     def adjust_player_y(self, item):
 
@@ -175,6 +232,13 @@ class Level:
             self.player.y_vel = 8
             self.player.rect.top = item.rect.bottom
             self.player.state = 'fall'
+            if item.name == 'box':
+                if item.state == 'normal':
+                    item.go_bumped()
+            elif item.name == 'brick':
+                if item.state == 'normal':
+                    item.go_bumped()
+
 
     def check_fall(self, item):
         item.rect.y += 1
@@ -210,5 +274,7 @@ class Level:
         self.brick_group.draw(self.game_ground)
         self.box_group.draw(self.game_ground)
         self.enemy_group.draw(self.game_ground)
+        self.die_group.draw(self.game_ground)
+        self.shell_group.draw(self.game_ground)
         surface.blit(self.game_ground, (0, 0), self.game_window)
         self.info.draw(surface)

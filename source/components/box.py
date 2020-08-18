@@ -5,12 +5,13 @@ from .. import constants as C
 
 
 class Box(pygame.sprite.Sprite):
-    def __init__(self, x, y, box_type):
+    def __init__(self, x, y, box_type, name='box'):
         pygame.sprite.Sprite.__init__(self)
         self.x = x
         self.y = y
         self.box_type = box_type
-        box_frame_rects = [(384, 0, 16, 16), (432, 0, 16, 16)]
+        self.gravity = C.GRAVITY
+        box_frame_rects = [(384, 0, 16, 16), (400, 0, 16, 16), (416, 0, 16, 16), (432, 0, 16, 16)]
 
         self.frame_rects = box_frame_rects
         self.frames = []
@@ -22,3 +23,48 @@ class Box(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = self.x
         self.rect.y = self.y
+        self.state = 'normal'
+        self.timer = 0
+        self.name = name
+
+    def update(self):
+        self.current_time = pygame.time.get_ticks()
+        self.handle_states()
+
+    def handle_states(self):
+        if self.state == 'normal':
+            self.normal()
+        elif self.state == 'bumped':
+            self.bumped()
+        elif self.state == 'opened':
+            self.opened()
+
+    def normal(self):
+        frame_durations = [500, 100, 100, 50]
+        if self.current_time - self.timer > frame_durations[self.frame_index]:
+            self.frame_index += 1
+            self.frame_index %= 4
+            self.timer = self.current_time
+        self.image = self.frames[self.frame_index]
+
+
+    def go_bumped(self):
+        self.y_vel = -7
+        self.state = 'bumped'
+
+
+    def bumped(self):
+        self.rect.y += self.y_vel
+        self.y_vel += self.gravity
+        self.frame_index = 3
+        self.image = self.frames[self.frame_index]
+
+        if self.rect.y > self.y:
+            self.rect.y = self.y
+            self.y_vel = 0
+            self.state = 'open'
+
+    def opened(self):
+        pass
+
+
