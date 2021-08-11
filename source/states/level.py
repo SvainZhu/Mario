@@ -126,9 +126,9 @@ class Level:
     def update(self, surface, keys):
 
         self.current_time = pygame.time.get_ticks()
-        self.player.update(keys)
+        self.player.update(keys, self)
 
-        if self.player.dead:
+        if self.player.is_dead:
             if self.current_time - self.player.death_timer > 3000:
                 self.finished = True
                 self.update_game_info()
@@ -166,7 +166,7 @@ class Level:
         self.check_x_collision()
 
         # y坐标碰撞检测
-        if not self.player.dead:
+        if not self.player.is_dead:
             self.player.rect.y += self.player.y_vel
             self.check_y_collision()
 
@@ -184,7 +184,7 @@ class Level:
         # 敌人的碰撞检测
         enemy = pygame.sprite.spritecollideany(self.player, self.enemy_group)
         if enemy:
-            if self.player.big:
+            if self.player.is_big:
                 self.player.state = 'get_smaller'
                 self.player.hurt_immune = True
             else:
@@ -208,9 +208,15 @@ class Level:
         # 状态道具的碰撞检测
         powerup = pygame.sprite.spritecollideany(self.player, self.powerup_group)
         if powerup:
-            powerup.kill()
-            if powerup.name == 'mushroom':
-                self.player.state = 'get_bigger'
+            if powerup.name == 'fireball':
+                pass
+
+            # if powerup.name == 'mushroom':
+            #     self.player.state = 'get_bigger'
+            #     powerup.kill()
+            elif not powerup == 'fireflower':
+                self.player.state = 'get_fire'
+                powerup.kill()
 
 
     # x坐标位置调整
@@ -281,7 +287,7 @@ class Level:
                 if item.state == 'normal':
                     item.go_bumped()
             elif item.name == 'brick':
-                if self.player.big and item.brick_type == 0:
+                if self.player.is_big and item.brick_type == 0:
                     item.smashed(self.die_group)
                 else:
                     item.go_bumped()
@@ -314,7 +320,7 @@ class Level:
             self.player.go_die()
 
     def update_game_info(self):
-        if self.player.dead:
+        if self.player.is_dead:
             self.game_info['lives'] -= 1
         if self.game_info['lives'] == 0:
             self.next = 'game_over'

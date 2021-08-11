@@ -147,10 +147,6 @@ class Enemy(pygame.sprite.Sprite):
             self.state = 'trampled'
 
 
-
-
-
-
 class Goomba(Enemy):
     def __init__(self, x, y_bottom, direction, name, color):
         brown_frame_rects = [(0, 16, 16, 16), (16, 16, 16, 16), (32, 16, 16, 16)]

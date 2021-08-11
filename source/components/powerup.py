@@ -94,7 +94,7 @@ class Fireflower(Powerup):
         self.x_vel = 2
         self.state = 'grow'
         self.name = 'fireflower'
-        self.transtion_timer = 0
+        self.transition_timer = 0
 
     def update(self, level):
         if self.state == 'grow':
@@ -104,22 +104,74 @@ class Fireflower(Powerup):
 
         self.current_timer = pygame.time.get_ticks()
 
-        if self.transtion_timer == 0:
-            self.transtion_timer = self.current_timer
-        if (self.current_timer - self.transtion_timer) > 60:
+        if self.transition_timer == 0:
+            self.transition_timer = self.current_timer
+        if (self.current_timer - self.transition_timer) > 60:
             self.frame_index += 1
             self.frame_index %= len(self.frames)
-            self.transtion_timer = self.current_timer
+            self.transition_timer = self.current_timer
             self.image = self.frames[self.frame_index]
 
 
 class Fireball(Powerup):
-    def __init__(self, centerx, centery):
-        Powerup.__init__(self, centerx, centery, [(0, 0, 16, 16)])
+    def __init__(self, centerx, centery, direction):
+        frame_rects = [(96, 144, 8, 8), (104, 144, 8, 8), (96, 152, 8, 8), (104, 152, 8, 8),  # fly
+                       (112, 144, 16, 16), (112, 160, 16, 16), (112, 176, 16, 16)]  # bloom
+        Powerup.__init__(self, centerx, centery, frame_rects)
+        self.name = 'fireball'
+        self.state = 'fly'
+        self.direction = direction
+        self.x_vel = 10 if self.direction else -10
+        self.y_vel = 10
+        self.gravity = 1
+        self.timer = 0
+
+    def update(self, level):
+        self.current_time = pygame.time.get_ticks()
+        if self.state == 'fly':
+            self.y_vel += self.gravity
+            if self.current_time - self.timer > 200:
+                self.timer = self.current_time
+                self.frame_index += 1
+                self.frame_index %= 4
+                self.image = self.frames[self.frame_index]
+            self.update_position(level)
+        elif self.state == 'boom':
+            if self.current_time - self.timer > 50:
+                if self.frame_index < 6:
+                    self.frame_index += 1
+                    self.timer = self.current_time
+                    self.image = self.frames[self.frame_index]
+                else:
+                    self.kill()
+
+    def update_position(self, level):
+        self.rect.x += self.x_vel
+        self.check_x_collisions(level)
+        self.rect.y += self.y_vel
+        self.check_y_collisions(level)
+
+        if self.rect.x < 0 or self.rect.y > C.SCREEN_H:
+            self.kill()
+
+    def check_x_collisions(self, level):
+        item = pygame.sprite.spritecollideany(self, level.ground_items_group)
+        if item:
+            self.frame_index = 4
+            self.state = 'boom'
+
+
+    def check_y_collisions(self, level):
+        group = pygame.sprite.Group(level.ground_items_group, level.brick_group, level.box_group)
+        item = pygame.sprite.spritecollideany(self, group)
+        if item:
+            if self.rect.top < item.rect.top:
+                self.rect.bottom = item.rect.top
+                self.y_vel = -10
+
 
 class LifeMushroom(Powerup):
-    def __init__(self, centerx, centery):
-        Powerup.__init__(self, centerx, centery, [(0, 0, 16, 16)])
+    pass
 
 class Star(Powerup):
     def __init__(self, centerx, centery):

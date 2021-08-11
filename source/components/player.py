@@ -4,7 +4,7 @@ import json
 import os
 from .. import tools, setup
 from .. import constants as C
-
+from ..components import powerup
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, name):
@@ -31,10 +31,13 @@ class Player(pygame.sprite.Sprite):
     def setup_states(self):
         self.state = 'stand'
         self.face_right = True
-        self.dead = False
-        self.big = False
+        self.is_dead = False
+        self.is_big = False
+        self.is_fire = False
         self.can_jump = True
+        self.can_shoot = True
         self.hurt_immune = False
+
 
     # 设置玩家此时的运动速度
     def setup_velocities(self):
@@ -60,6 +63,7 @@ class Player(pygame.sprite.Sprite):
         self.transition_timer = 0
         self.death_timer = 0
         self.hurt_immune_timer = 0
+        self.last_fireball_timer = 0
 
 
     # 导入玩家各个运动时的帧图片
@@ -112,29 +116,32 @@ class Player(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
 
     # 根据用户的输入的按键值更新玩家的位置
-    def update(self, keys):
+    def update(self, keys, level):
         self.current_time = pygame.time.get_ticks()
-        self.handle_states(keys)
+        self.handle_states(keys, level)
         self.is_hurt_immune()
 
-    def handle_states(self, keys):
+    def handle_states(self, keys, level):
 
         self.if_can_jump(keys)
+        self.if_can_shoot(keys)
 
         if self.state == 'stand':
-            self.stand(keys)
+            self.stand(keys, level)
         elif self.state == 'walk':
-            self.walk(keys)
+            self.walk(keys, level)
         elif self.state == 'jump':
-            self.jump(keys)
+            self.jump(keys, level)
         elif self.state == 'fall':
-            self.fall(keys)
+            self.fall(keys, level)
         elif self.state == 'die':
             self.die(keys)
         elif self.state == 'get_bigger':
             self.get_bigger(keys)
         elif self.state == 'get_smaller':
             self.get_smaller(keys)
+        elif self.state == 'get_fire':
+            self.get_fire(keys)
 
         if self.face_right:
             self.image = self.right_frames[self.frame_index]
@@ -145,7 +152,11 @@ class Player(pygame.sprite.Sprite):
         if not keys[pygame.K_SPACE]:
             self.can_jump = True
 
-    def stand(self, keys):
+    def if_can_shoot(self, keys):
+        if not keys[pygame.K_a]:
+            self.can_shoot = True
+
+    def stand(self, keys, level):
         self.x_vel = 0
         self.y_vel = 0
         self.frame_index = 0
@@ -158,9 +169,11 @@ class Player(pygame.sprite.Sprite):
         elif keys[pygame.K_SPACE] and self.can_jump:
             self.state = 'jump'
             self.y_vel = self.jump_vel
+        elif keys[pygame.K_a] and self.is_fire and self.can_shoot:
+            self.shoot_fireball(level)
 
 
-    def walk(self, keys):
+    def walk(self, keys, level):
         if keys[pygame.K_s]:
             self.max_x_vel = self.max_run_vel
             self.x_accel = self.max_run_vel
@@ -190,6 +203,8 @@ class Player(pygame.sprite.Sprite):
                 self.frame_index = 5
                 self.x_accel = self.turn_accel
             self.x_vel = self.calc_vel(self.x_vel, self.x_accel, self.max_x_vel, False)
+        elif keys[pygame.K_a] and self.is_fire and self.can_shoot:
+            self.shoot_fireball(level)
         else:
             if self.face_right:
                 self.x_vel -= self.x_accel
@@ -204,7 +219,7 @@ class Player(pygame.sprite.Sprite):
 
 
 
-    def jump(self, keys):
+    def jump(self, keys, level):
         self.frame_index = 4
         self.y_vel += self.anti_gravity
         self.can_jump = False
@@ -218,8 +233,12 @@ class Player(pygame.sprite.Sprite):
 
         if not keys[pygame.K_SPACE]:
             self.state = 'fall'
+        if keys[pygame.K_a] and self.is_fire and self.can_shoot:
+            self.shoot_fireball(level)
 
-    def fall(self, keys):
+    def fall(self, keys, level):
+        if keys[pygame.K_a] and self.is_fire and self.can_shoot:
+            self.shoot_fireball(level)
         self.y_vel = self.calc_vel(self.y_vel, self.gravity, self.max_y_vel)
 
     def die(self, keys):
@@ -227,7 +246,7 @@ class Player(pygame.sprite.Sprite):
         self.y_vel += self.anti_gravity
 
     def go_die(self):
-        self.dead = True
+        self.is_dead = True
         self.y_vel = self.jump_vel
         self.frame_index = 6
         self.state = 'die'
@@ -238,7 +257,7 @@ class Player(pygame.sprite.Sprite):
         sizes = [1, 0, 1, 0, 1, 2, 0, 1, 2, 0, 2]       # 0: small 1: medium 2: big
         frames_and_idx = [(self.small_normal_frames, 0), (self.small_normal_frames, 7), (self.big_normal_frames, 0)]
         if self.transition_timer == 0:
-            self.big = True
+            self.is_big = True
             self.transition_timer = self.current_time
             self.trans_idx = 0
         elif self.current_time - self.transition_timer > frame_dur:
@@ -257,7 +276,7 @@ class Player(pygame.sprite.Sprite):
         sizes = [2, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]  # 0: small 1: medium 2: big
         frames_and_idx = [(self.small_normal_frames, 8), (self.big_normal_frames, 8), (self.big_normal_frames, 4)]
         if self.transition_timer == 0:
-            self.big = False
+            self.is_big = False
             self.transition_timer = self.current_time
             self.trans_idx = 0
         elif self.current_time - self.transition_timer > frame_dur:
@@ -270,6 +289,26 @@ class Player(pygame.sprite.Sprite):
                 self.state = 'walk'
                 self.right_frames = self.right_small_normal_frames
                 self.left_frames = self.left_small_normal_frames
+
+    def get_fire(self, keys):
+        frame_dur = 60
+        sizes = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]  # 0: small 1: medium 2: big
+        frames_and_idx = [(self.big_fire_frames, 3), (self.big_normal_frames, 3)]
+        if self.transition_timer == 0:
+            self.is_fire = True
+            self.transition_timer = self.current_time
+            self.trans_idx = 0
+        elif self.current_time - self.transition_timer > frame_dur:
+            self.transition_timer = self.current_time
+            frames, idx = frames_and_idx[sizes[self.trans_idx]]
+            self.switch_player_image(frames, idx)
+            self.trans_idx += 1
+            if self.trans_idx == len(sizes):
+                self.transition_timer = 0
+                self.state = 'walk'
+                self.right_frames = self.right_big_fire_frames
+                self.left_frames = self.left_big_fire_frames
+
 
 
 
@@ -312,3 +351,11 @@ class Player(pygame.sprite.Sprite):
             else:
                 self.hurt_immune = False
                 self.hurt_immune_timer = 0
+
+    def shoot_fireball(self, level):
+        if self.current_time - self.last_fireball_timer > 1:
+            self.last_fireball_timer = self.current_time
+            self.frame_index = 6
+            fireball = powerup.Fireball(self.rect.centerx, self.rect.centery, self.face_right)
+            level.powerup_group.add(fireball)
+            self.can_shoot = False
