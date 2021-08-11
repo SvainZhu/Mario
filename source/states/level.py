@@ -132,6 +132,10 @@ class Level:
             if self.current_time - self.player.death_timer > 3000:
                 self.finished = True
                 self.update_game_info()
+
+        elif self.is_frozen():
+            pass
+
         else:
             self.update_player_position()
             self.check_checkpoint()
@@ -143,10 +147,13 @@ class Level:
             self.enemy_group.update(self)
             self.die_group.update(self)
             self.shell_group.update(self)
-            self.powerup_group.update()
+            self.powerup_group.update(self)
             self.coin_group.update()
 
         self.draw(surface)
+
+    def is_frozen(self):
+        return self.player.state in ['get_bigger', 'get_smaller', 'get_fire', 'lose_fire']
 
 
     def update_player_position(self):
@@ -171,10 +178,19 @@ class Level:
         if ground_item:
             self.adjust_player_x(ground_item)
 
+        if self.player.hurt_immune:
+            return
+
+        # 敌人的碰撞检测
         enemy = pygame.sprite.spritecollideany(self.player, self.enemy_group)
         if enemy:
-            self.player.go_die()
+            if self.player.big:
+                self.player.state = 'get_smaller'
+                self.player.hurt_immune = True
+            else:
+                self.player.go_die()
 
+        # 龟壳的碰撞检测
         shell = pygame.sprite.spritecollideany(self.player, self.shell_group)
         if shell:
             if shell.state == 'slide':
@@ -189,7 +205,12 @@ class Level:
                 shell.direction = 0
             shell.state = 'slide'
 
-
+        # 状态道具的碰撞检测
+        powerup = pygame.sprite.spritecollideany(self.player, self.powerup_group)
+        if powerup:
+            powerup.kill()
+            if powerup.name == 'mushroom':
+                self.player.state = 'get_bigger'
 
 
     # x坐标位置调整
@@ -221,6 +242,8 @@ class Level:
         elif box:
             self.adjust_player_y(box)
         elif enemy:
+            if self.player.hurt_immune:
+                return
             self.enemy_group.remove(enemy)
             if enemy.name == 'koopa':
                 self.shell_group.add(enemy)
@@ -234,12 +257,14 @@ class Level:
                 self.player.state = 'jump'
                 self.player.rect.bottom = enemy.rect.top
                 self.player.y_vel = self.player.jump_vel * 0.8
-            enemy.go_die(die)
+            enemy.go_die(die, 1 if self.player.face_right else -1)
 
-        self.check_fall(self.player)
+        self.check_fall(self.player)        # 掉落检测
+
 
 
     def adjust_player_y(self, item):
+
 
         if self.player.rect.bottom < item.rect.bottom:
             self.player.rect.bottom = item.rect.top
@@ -250,22 +275,38 @@ class Level:
             self.player.y_vel = 8
             self.player.rect.top = item.rect.bottom
             self.player.state = 'fall'
+            self.is_enemy_on(item)
+
             if item.name == 'box':
                 if item.state == 'normal':
                     item.go_bumped()
             elif item.name == 'brick':
-                if item.state == 'normal':
+                if self.player.big and item.brick_type == 0:
+                    item.smashed(self.die_group)
+                else:
                     item.go_bumped()
+
+    def is_enemy_on(self, item):
+        item.rect.y -= 1
+        enemy = pygame.sprite.spritecollideany(item, self.enemy_group)
+        if enemy:
+            self.enemy_group.remove(enemy)
+            self.die_group.add(enemy)
+            if item.rect.centerx > enemy.rect.centerx:
+                enemy.go_die('bumped', -1)
+            else:
+                enemy.go_die('bumped', 1)
+        item.rect.y += 1
 
 
     def check_fall(self, item):
         item.rect.y += 1
         items = pygame.sprite.Group(self.brick_group, self.ground_items_group, self.box_group)
         collided = pygame.sprite.spritecollideany(item, items)
-        if not collided and item.state != 'jump':
+        if not collided and item.state != 'jump' and not self.is_frozen():
             item.state= 'fall'
 
-        item.rect.y -=1
+        item.rect.y -= 1
 
 
     def check_if_go_die(self):
@@ -289,6 +330,8 @@ class Level:
     def draw(self, surface):
         self.game_ground.blit(self.background, self.game_window, self.game_window)
         self.game_ground.blit(self.player.image, self.player.rect)
+        self.coin_group.draw(self.game_ground)
+        self.powerup_group.draw(self.game_ground)
         self.brick_group.draw(self.game_ground)
         self.box_group.draw(self.game_ground)
         self.enemy_group.draw(self.game_ground)
@@ -296,5 +339,3 @@ class Level:
         self.shell_group.draw(self.game_ground)
         surface.blit(self.game_ground, (0, 0), self.game_window)
         self.info.draw(surface)
-        self.coin_group.draw(self.game_ground)
-        self.powerup_group.draw(self.game_ground)
